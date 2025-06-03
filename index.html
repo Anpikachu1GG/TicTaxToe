@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Caro 20x20</title>
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:700&display=swap" rel="stylesheet">
+    <!-- Uiverse.io button & select styles -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@uiverse/uiverse@latest/dist/uiverse.min.css">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div id="message"></div>
+    <div class="panel">
+        <div id="score">
+            Bạn: <span id="score-x">0</span> &nbsp;|&nbsp; AI: <span id="score-o">0</span>
+        </div>
+        <label>
+            Độ khó:
+            <select id="difficulty" class="uiverse-select">
+                <option value="easy">Dễ</option>
+                <option value="medium">Trung bình</option>
+                <option value="hard" selected>Khó</option>
+            </select>
+        </label>
+        <button id="restart" class="uiverse-btn">Chơi lại</button>
+    </div>
+    <div class="board" id="board">
+        <!-- Sinh số cell động theo kích thước màn hình -->
+        <script>
+            // Xác định số cột và hàng dựa trên kích thước màn hình
+            let cols = 20, rows = 20;
+            if (window.innerWidth <= 400) { cols = 5; rows = 8; }
+            else if (window.innerWidth <= 600) { cols = 5; rows = 8; }
+            else if (window.innerWidth <= 900) { cols = 12; rows = 12; }
+            document.write(Array(cols * rows).fill('<div class="cell"></div>').join(''));
+            // Lưu lại để JS game dùng đúng kích thước
+            window.BOARD_COLS = cols;
+            window.BOARD_ROWS = rows;
+        </script>
+    </div>
+    <script src="./index.js"></script>
+</body>
+</html>
