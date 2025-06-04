@@ -35,9 +35,15 @@ class Game {
 
 class AI {
     makeMove(board) {
+        if (difficulty === 'easy') return this.makeMoveEasy(board);
+        else if (difficulty === 'medium') return this.makeMoveMedium(board);
+        else return this.makeMoveHard(board);
+    }
+
+    makeMoveEasy(board) {
         const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
 
-        // 1. Ưu tiên thắng ngay nếu có thể
+        // 1. Thắng ngay
         for (const idx of empty) {
             board[idx] = 'O';
             if (getWinCombo(board)) {
@@ -47,7 +53,7 @@ class AI {
             board[idx] = null;
         }
 
-        // 2. Ưu tiên chặn thắng của người chơi
+        // 2. Chặn thắng người chơi
         for (const idx of empty) {
             board[idx] = 'X';
             if (getWinCombo(board)) {
@@ -57,22 +63,13 @@ class AI {
             board[idx] = null;
         }
 
-        // 3. Đánh giá công thủ toàn diện: 
-        // - Ưu tiên nước đi giúp AI tạo chuỗi dài nhất và đồng thời chặn chuỗi dài nhất của người chơi.
-        // - Ưu tiên nước đi mở (hai đầu đều trống) hơn nước bị chặn một đầu.
+        // 3. Ưu tiên chuỗi 3 trở lên, ưu tiên mở 2 đầu
         let bestScore = -Infinity;
         let bestMoves = [];
         for (const idx of empty) {
-            // Đánh thử cho AI
             board[idx] = 'O';
-            const aiScore = this.evaluateComprehensive(board, idx, 'O');
+            const score = this.evaluateComprehensive(board, idx, 'O');
             board[idx] = null;
-            // Đánh thử cho người chơi
-            board[idx] = 'X';
-            const playerScore = this.evaluateComprehensive(board, idx, 'X');
-            board[idx] = null;
-            // Trọng số: công mạnh hơn thủ một chút
-            const score = aiScore * 1.15 + playerScore;
             if (score > bestScore) {
                 bestScore = score;
                 bestMoves = [idx];
@@ -80,34 +77,14 @@ class AI {
                 bestMoves.push(idx);
             }
         }
-        if (bestMoves.length > 0 && bestScore > 0) {
+        if (bestMoves.length > 0 && bestScore >= 50) { // Chuỗi 3+ mở
             return bestMoves[Math.floor(Math.random() * bestMoves.length)];
         }
 
-        // 4. Tìm nước đi tạo ra nhiều hơn một hướng 4 hoặc 3 liên tiếp (bẫy chéo)
-        let bestTrapScore = -1;
-        let trapMoves = [];
-        for (const idx of empty) {
-            let trapScore = 0;
-            for (let len = WIN_LENGTH - 2; len <= WIN_LENGTH - 1; len++) {
-                trapScore += this.countPotentialLines(board, idx, 'O', len);
-            }
-            if (trapScore > bestTrapScore) {
-                bestTrapScore = trapScore;
-                trapMoves = [idx];
-            } else if (trapScore === bestTrapScore && trapScore > 0) {
-                trapMoves.push(idx);
-            }
-        }
-        if (trapMoves.length > 0 && bestTrapScore > 0) {
-            return trapMoves[Math.floor(Math.random() * trapMoves.length)];
-        }
-
-        // 5. Ưu tiên đánh gần nước X nhất
+        // 4. Ưu tiên đánh gần người chơi
         const playerMoves = board
             .map((v, i) => v === 'X' ? i : null)
             .filter(i => i !== null);
-
         if (playerMoves.length > 0) {
             let candidate = [];
             for (const idx of playerMoves) {
@@ -134,14 +111,188 @@ class AI {
             }
         }
 
-        // 6. Nếu không có nước nào ưu tiên, random
+        // 5. Random nếu không còn gì khác
+        return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    makeMoveMedium(board) {
+        const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
+
+        // 1. Thắng ngay
+        for (const idx of empty) {
+            board[idx] = 'O';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 2. Chặn thắng người chơi
+        for (const idx of empty) {
+            board[idx] = 'X';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 3. Đánh giá công + thủ (công nặng hơn)
+        let bestScore = -Infinity;
+        let bestMoves = [];
+        for (const idx of empty) {
+            board[idx] = 'O';
+            const aiScore = this.evaluateComprehensive(board, idx, 'O');
+            board[idx] = null;
+            board[idx] = 'X';
+            const playerScore = this.evaluateComprehensive(board, idx, 'X');
+            board[idx] = null;
+            const score = aiScore * 1.2 + playerScore; // Ưu tiên tấn công
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoves = [idx];
+            } else if (score === bestScore) {
+                bestMoves.push(idx);
+            }
+        }
+
+        // 4. Nếu có nhiều nước tốt, ưu tiên gần người chơi
+        if (bestMoves.length > 0 && bestScore > 0) {
+            const playerMoves = board
+                .map((v, i) => v === 'X' ? i : null)
+                .filter(i => i !== null);
+            if (playerMoves.length > 0) {
+                let candidate = [];
+                for (const idx of playerMoves) {
+                    const x = idx % BOARD_SIZE;
+                    const y = Math.floor(idx / BOARD_SIZE);
+                    for (let dx = -1; dx <= 1; dx++) {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (
+                                nx >= 0 && nx < BOARD_SIZE &&
+                                ny >= 0 && ny < BOARD_SIZE
+                            ) {
+                                const nidx = ny * BOARD_SIZE + nx;
+                                if (bestMoves.includes(nidx)) candidate.push(nidx);
+                            }
+                        }
+                    }
+                }
+                candidate = [...new Set(candidate)].filter(i => !board[i]);
+                if (candidate.length > 0) {
+                    return candidate[Math.floor(Math.random() * candidate.length)];
+                }
+            }
+            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+        }
+
+        // 5. Random nếu cần
+        return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    makeMoveHard(board) {
+        const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
+
+        // 1. Thắng ngay
+        for (const idx of empty) {
+            board[idx] = 'O';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 2. Chặn thắng người chơi
+        for (const idx of empty) {
+            board[idx] = 'X';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 3. Đánh giá công/thủ toàn diện (công nặng hơn)
+        let bestScore = -Infinity;
+        let bestMoves = [];
+        for (const idx of empty) {
+            board[idx] = 'O';
+            const aiScore = this.evaluateComprehensive(board, idx, 'O');
+            board[idx] = null;
+            board[idx] = 'X';
+            const playerScore = this.evaluateComprehensive(board, idx, 'X');
+            board[idx] = null;
+            const score = aiScore * 1.15 + playerScore;
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoves = [idx];
+            } else if (score === bestScore) {
+                bestMoves.push(idx);
+            }
+        }
+        if (bestMoves.length > 0 && bestScore > 0) {
+            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+        }
+
+        // 4. Gài bẫy: Tạo 2 hướng 3+ liên tiếp
+        let bestTrapScore = -1;
+        let trapMoves = [];
+        for (const idx of empty) {
+            let trapScore = 0;
+            for (let len = WIN_LENGTH - 2; len <= WIN_LENGTH - 1; len++) {
+                trapScore += this.countPotentialLines(board, idx, 'O', len);
+            }
+            if (trapScore > bestTrapScore) {
+                bestTrapScore = trapScore;
+                trapMoves = [idx];
+            } else if (trapScore === bestTrapScore && trapScore > 0) {
+                trapMoves.push(idx);
+            }
+        }
+        if (trapMoves.length > 0 && bestTrapScore >= 2) { // Ưu tiên bẫy 2 hướng
+            return trapMoves[Math.floor(Math.random() * trapMoves.length)];
+        }
+
+        // 5. Ưu tiên đánh gần người chơi
+        const playerMoves = board
+            .map((v, i) => v === 'X' ? i : null)
+            .filter(i => i !== null);
+        if (playerMoves.length > 0) {
+            let candidate = [];
+            for (const idx of playerMoves) {
+                const x = idx % BOARD_SIZE;
+                const y = Math.floor(idx / BOARD_SIZE);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (
+                            nx >= 0 && nx < BOARD_SIZE &&
+                            ny >= 0 && ny < BOARD_SIZE
+                        ) {
+                            const nidx = ny * BOARD_SIZE + nx;
+                            if (!board[nidx]) candidate.push(nidx);
+                        }
+                    }
+                }
+            }
+            candidate = [...new Set(candidate)].filter(i => !board[i]);
+            if (candidate.length > 0) {
+                return candidate[Math.floor(Math.random() * candidate.length)];
+            }
+        }
+
+        // 6. Random cuối cùng
         return empty[Math.floor(Math.random() * empty.length)];
     }
 
     evaluateComprehensive(board, idx, player) {
-        // Đánh giá điểm công/thủ cho một nước đi: 
-        // - Dài chuỗi càng lớn điểm càng cao
-        // - Chuỗi mở (hai đầu trống) điểm cao hơn chuỗi bị chặn một đầu
         const directions = [
             {dx: 1, dy: 0},
             {dx: 0, dy: 1},
@@ -190,7 +341,7 @@ class AI {
                     break;
                 } else break;
             }
-            // Tính điểm: chuỗi càng dài càng nhiều điểm, chuỗi mở (block=0) điểm cao nhất
+            // Tính điểm: ưu tiên chuỗi mở (block=0), chuỗi dài
             if (count >= WIN_LENGTH) score += 10000;
             else if (count === WIN_LENGTH - 1 && block === 0) score += 5000;
             else if (count === WIN_LENGTH - 1 && block === 1) score += 1000;
@@ -204,7 +355,6 @@ class AI {
     }
 
     countPotentialLines(board, idx, player, length) {
-        // Đếm số hướng mà nếu đánh vào idx sẽ tạo ra chuỗi 'length' liên tiếp cho player
         const directions = [
             {dx: 1, dy: 0},
             {dx: 0, dy: 1},
@@ -283,12 +433,11 @@ const game = new Game();
 const ai = new AI();
 
 function getWinCombo(board) {
-    // Kiểm tra tất cả các hướng cho mỗi ô
     const directions = [
-        {dx: 1, dy: 0},   // ngang
-        {dx: 0, dy: 1},   // dọc
-        {dx: 1, dy: 1},   // chéo xuôi
-        {dx: 1, dy: -1},  // chéo ngược
+        {dx: 1, dy: 0},
+        {dx: 0, dy: 1},
+        {dx: 1, dy: 1},
+        {dx: 1, dy: -1},
     ];
     for (let y = 0; y < BOARD_SIZE; y++) {
         for (let x = 0; x < BOARD_SIZE; x++) {
