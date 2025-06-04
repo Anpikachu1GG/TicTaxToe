@@ -40,6 +40,7 @@ class AI {
         else return this.makeMoveHard(board);
     }
 
+    // Độ dễ: chỉ chặn thắng và chọn ngẫu nhiên gần người chơi
     makeMoveEasy(board) {
         const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
 
@@ -63,25 +64,7 @@ class AI {
             board[idx] = null;
         }
 
-        // 3. Ưu tiên chuỗi 3 trở lên, ưu tiên mở 2 đầu
-        let bestScore = -Infinity;
-        let bestMoves = [];
-        for (const idx of empty) {
-            board[idx] = 'O';
-            const score = this.evaluateComprehensive(board, idx, 'O');
-            board[idx] = null;
-            if (score > bestScore) {
-                bestScore = score;
-                bestMoves = [idx];
-            } else if (score === bestScore) {
-                bestMoves.push(idx);
-            }
-        }
-        if (bestMoves.length > 0 && bestScore >= 50) { // Chuỗi 3+ mở
-            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-        }
-
-        // 4. Ưu tiên đánh gần người chơi
+        // 3. Ưu tiên đánh gần người chơi
         const playerMoves = board
             .map((v, i) => v === 'X' ? i : null)
             .filter(i => i !== null);
@@ -111,10 +94,11 @@ class AI {
             }
         }
 
-        // 5. Random nếu không còn gì khác
+        // 4. Random
         return empty[Math.floor(Math.random() * empty.length)];
     }
 
+    // Độ trung bình: đánh giá công thủ, ưu tiên tạo thế mở, nhận diện double threats đơn giản
     makeMoveMedium(board) {
         const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
 
@@ -138,127 +122,42 @@ class AI {
             board[idx] = null;
         }
 
-        // 3. Đánh giá công + thủ (công nặng hơn)
-        let bestScore = -Infinity;
-        let bestMoves = [];
+        // 3. Ưu tiên nước đi tạo ra nhiều hơn 1 threat (double threat)
+        let doubleThreatMoves = [];
         for (const idx of empty) {
-            board[idx] = 'O';
-            const aiScore = this.evaluateComprehensive(board, idx, 'O');
-            board[idx] = null;
-            board[idx] = 'X';
-            const playerScore = this.evaluateComprehensive(board, idx, 'X');
-            board[idx] = null;
-            const score = aiScore * 1.2 + playerScore; // Ưu tiên tấn công
-            if (score > bestScore) {
-                bestScore = score;
-                bestMoves = [idx];
-            } else if (score === bestScore) {
-                bestMoves.push(idx);
-            }
-        }
-
-        // 4. Nếu có nhiều nước tốt, ưu tiên gần người chơi
-        if (bestMoves.length > 0 && bestScore > 0) {
-            const playerMoves = board
-                .map((v, i) => v === 'X' ? i : null)
-                .filter(i => i !== null);
-            if (playerMoves.length > 0) {
-                let candidate = [];
-                for (const idx of playerMoves) {
-                    const x = idx % BOARD_SIZE;
-                    const y = Math.floor(idx / BOARD_SIZE);
-                    for (let dx = -1; dx <= 1; dx++) {
-                        for (let dy = -1; dy <= 1; dy++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (
-                                nx >= 0 && nx < BOARD_SIZE &&
-                                ny >= 0 && ny < BOARD_SIZE
-                            ) {
-                                const nidx = ny * BOARD_SIZE + nx;
-                                if (bestMoves.includes(nidx)) candidate.push(nidx);
-                            }
-                        }
-                    }
-                }
-                candidate = [...new Set(candidate)].filter(i => !board[i]);
-                if (candidate.length > 0) {
-                    return candidate[Math.floor(Math.random() * candidate.length)];
-                }
-            }
-            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-        }
-
-        // 5. Random nếu cần
-        return empty[Math.floor(Math.random() * empty.length)];
-    }
-
-    makeMoveHard(board) {
-        const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
-
-        // 1. Thắng ngay
-        for (const idx of empty) {
-            board[idx] = 'O';
-            if (getWinCombo(board)) {
-                board[idx] = null;
-                return idx;
-            }
-            board[idx] = null;
-        }
-
-        // 2. Chặn thắng người chơi
-        for (const idx of empty) {
-            board[idx] = 'X';
-            if (getWinCombo(board)) {
-                board[idx] = null;
-                return idx;
-            }
-            board[idx] = null;
-        }
-
-        // 3. Đánh giá công/thủ toàn diện (công nặng hơn)
-        let bestScore = -Infinity;
-        let bestMoves = [];
-        for (const idx of empty) {
-            board[idx] = 'O';
-            const aiScore = this.evaluateComprehensive(board, idx, 'O');
-            board[idx] = null;
-            board[idx] = 'X';
-            const playerScore = this.evaluateComprehensive(board, idx, 'X');
-            board[idx] = null;
-            const score = aiScore * 1.15 + playerScore;
-            if (score > bestScore) {
-                bestScore = score;
-                bestMoves = [idx];
-            } else if (score === bestScore) {
-                bestMoves.push(idx);
-            }
-        }
-        if (bestMoves.length > 0 && bestScore > 0) {
-            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-        }
-
-        // 4. Gài bẫy: Tạo 2 hướng 3+ liên tiếp
-        let bestTrapScore = -1;
-        let trapMoves = [];
-        for (const idx of empty) {
-            let trapScore = 0;
+            let threats = 0;
             for (let len = WIN_LENGTH - 2; len <= WIN_LENGTH - 1; len++) {
-                trapScore += this.countPotentialLines(board, idx, 'O', len);
+                threats += this.countPotentialLines(board, idx, 'O', len);
             }
-            if (trapScore > bestTrapScore) {
-                bestTrapScore = trapScore;
-                trapMoves = [idx];
-            } else if (trapScore === bestTrapScore && trapScore > 0) {
-                trapMoves.push(idx);
-            }
+            if (threats >= 2) doubleThreatMoves.push(idx);
         }
-        if (trapMoves.length > 0 && bestTrapScore >= 2) { // Ưu tiên bẫy 2 hướng
-            return trapMoves[Math.floor(Math.random() * trapMoves.length)];
+        if (doubleThreatMoves.length > 0) {
+            return doubleThreatMoves[Math.floor(Math.random() * doubleThreatMoves.length)];
         }
 
-        // 5. Ưu tiên đánh gần người chơi
+        // 4. Đánh giá công/thủ, ưu tiên công
+        let bestScore = -Infinity;
+        let bestMoves = [];
+        for (const idx of empty) {
+            board[idx] = 'O';
+            const aiScore = this.evaluateComprehensive(board, idx, 'O');
+            board[idx] = null;
+            board[idx] = 'X';
+            const playerScore = this.evaluateComprehensive(board, idx, 'X');
+            board[idx] = null;
+            const score = aiScore * 1.1 + playerScore * 0.9;
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoves = [idx];
+            } else if (score === bestScore) {
+                bestMoves.push(idx);
+            }
+        }
+        if (bestMoves.length > 0 && bestScore > 0) {
+            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+        }
+
+        // 5. Ưu tiên gần người chơi
         const playerMoves = board
             .map((v, i) => v === 'X' ? i : null)
             .filter(i => i !== null);
@@ -288,7 +187,114 @@ class AI {
             }
         }
 
-        // 6. Random cuối cùng
+        // 6. Random
+        return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    // Độ khó: nhận diện double threats, ưu tiên phòng thủ chủ động, đánh giá sâu hơn
+    makeMoveHard(board) {
+        const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
+
+        // 1. Thắng ngay
+        for (const idx of empty) {
+            board[idx] = 'O';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 2. Chặn thắng người chơi
+        for (const idx of empty) {
+            board[idx] = 'X';
+            if (getWinCombo(board)) {
+                board[idx] = null;
+                return idx;
+            }
+            board[idx] = null;
+        }
+
+        // 3. Phòng thủ chủ động: chặn double threats của người chơi
+        let playerDoubleThreats = [];
+        for (const idx of empty) {
+            let threats = 0;
+            for (let len = WIN_LENGTH - 2; len <= WIN_LENGTH - 1; len++) {
+                threats += this.countPotentialLines(board, idx, 'X', len);
+            }
+            if (threats >= 2) playerDoubleThreats.push(idx);
+        }
+        if (playerDoubleThreats.length > 0) {
+            return playerDoubleThreats[Math.floor(Math.random() * playerDoubleThreats.length)];
+        }
+
+        // 4. Tạo double threats cho AI
+        let aiDoubleThreats = [];
+        for (const idx of empty) {
+            let threats = 0;
+            for (let len = WIN_LENGTH - 2; len <= WIN_LENGTH - 1; len++) {
+                threats += this.countPotentialLines(board, idx, 'O', len);
+            }
+            if (threats >= 2) aiDoubleThreats.push(idx);
+        }
+        if (aiDoubleThreats.length > 0) {
+            return aiDoubleThreats[Math.floor(Math.random() * aiDoubleThreats.length)];
+        }
+
+        // 5. Đánh giá công/thủ sâu hơn, ưu tiên công mạnh
+        let bestScore = -Infinity;
+        let bestMoves = [];
+        for (const idx of empty) {
+            board[idx] = 'O';
+            const aiScore = this.evaluateComprehensive(board, idx, 'O');
+            board[idx] = null;
+            board[idx] = 'X';
+            const playerScore = this.evaluateComprehensive(board, idx, 'X');
+            board[idx] = null;
+            // Tăng trọng số công, giảm thủ
+            const score = aiScore * 1.25 + playerScore * 0.8;
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoves = [idx];
+            } else if (score === bestScore) {
+                bestMoves.push(idx);
+            }
+        }
+        if (bestMoves.length > 0 && bestScore > 0) {
+            return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+        }
+
+        // 6. Ưu tiên gần người chơi
+        const playerMoves = board
+            .map((v, i) => v === 'X' ? i : null)
+            .filter(i => i !== null);
+        if (playerMoves.length > 0) {
+            let candidate = [];
+            for (const idx of playerMoves) {
+                const x = idx % BOARD_SIZE;
+                const y = Math.floor(idx / BOARD_SIZE);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (
+                            nx >= 0 && nx < BOARD_SIZE &&
+                            ny >= 0 && ny < BOARD_SIZE
+                        ) {
+                            const nidx = ny * BOARD_SIZE + nx;
+                            if (!board[nidx]) candidate.push(nidx);
+                        }
+                    }
+                }
+            }
+            candidate = [...new Set(candidate)].filter(i => !board[i]);
+            if (candidate.length > 0) {
+                return candidate[Math.floor(Math.random() * candidate.length)];
+            }
+        }
+
+        // 7. Random cuối cùng
         return empty[Math.floor(Math.random() * empty.length)];
     }
 
